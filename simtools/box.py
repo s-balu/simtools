@@ -30,9 +30,11 @@ class Snapshot:
         """
         """
 
-        length_norm = self.unit_length / (length_unit * self.cm_per_kpc)
+        #length_norm = self.unit_length / (length_unit * self.cm_per_kpc)
+        length_norm = self.unit_length_in_cm / (self.cm_per_kpc)
 
-        width = self.box_size * self.scale_phys / 2
+        #width = self.box_size * self.scale_phys / 2
+        width = self.box_size * length_norm / 2
         coords = self.coords - np.array(center)  # - np.array([width]*3)
         if type(extent) == float or type(extent) == int:
             extent = [extent, extent]
@@ -105,8 +107,8 @@ class Snapshot:
         """
 
         pretty_print([round(self.redshift, 3),
-                      self.box_size*self.unit_length/(1e3*self.cm_per_kpc),
-                      '{}^3'.format(self.nsample),
+                      self.box_size*self.unit_length_in_cm/(1e3*self.cm_per_kpc),
+                      '{}^3'.format(int(self.nsample)),
                       self.Omega0,
                       self.OmegaBaryon,
                       1-self.Omega0],

@@ -1,0 +1,3 @@
+.eggs/
+simtools.egg-info/
+simtools/__pycache__

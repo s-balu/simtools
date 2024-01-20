@@ -53,6 +53,8 @@ class GadgetBox:
                     self.time = datafile['Header'].attrs['Time']
                 if 'NSample' in datafile['Header'].attrs:
                     self.nsample = datafile['Header'].attrs['NSample']
+                elif 'NumPart_Total' in datafile['Header'].attrs:
+                    self.nsample = np.cbrt(datafile['Header'].attrs['NumPart_Total'][1])
                 else:
                     self.nsample = 1
                 if 'Omega0' in datafile['Header'].attrs:
@@ -85,8 +87,6 @@ class GadgetBox:
                         self.scale_factor = self.time
                 if 'NSample' in datafile['Parameters'].attrs:
                     self.nsample = datafile['Parameters'].attrs['NSample']
-                else:
-                    self.nsample = 1
                 if 'Omega0' in datafile['Parameters'].attrs:
                     self.Omega0 = datafile['Parameters'].attrs['Omega0']
                 if 'OmegaBaryon' in datafile['Parameters'].attrs:
