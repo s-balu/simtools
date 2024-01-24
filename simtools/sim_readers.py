@@ -60,11 +60,9 @@ class GadgetBox:
                 if 'Omega0' in datafile['Header'].attrs:
                     self.Omega0 = datafile['Header'].attrs['Omega0']
                 if 'OmegaBaryon' in datafile['Header'].attrs:
-                    self.OmegaBaryon = datafile['Header'].attrs[
-                        'OmegaBaryon']
+                    self.OmegaBaryon = datafile['Header'].attrs['OmegaBaryon']
                 if 'OmegaLambda' in datafile['Header'].attrs:
-                    self.OmegaLambda = datafile['Header'].attrs[
-                        'OmegaLambda']
+                    self.OmegaLambda = datafile['Header'].attrs['OmegaLambda']
                 if 'HubbleParam' in datafile['Header'].attrs:
                     self.h = datafile['Header'].attrs['HubbleParam']
                 if 'Hubble' in datafile['Header'].attrs:
@@ -83,7 +81,7 @@ class GadgetBox:
                     self.time = datafile['Parameters'].attrs['Time']
                 if 'ComovingIntegrationOn' in datafile['Parameters'].attrs:
                     if datafile['Parameters'].attrs[
-                                'ComovingIntegrationOn'] == 1:
+                            'ComovingIntegrationOn'] == 1:
                         self.scale_factor = self.time
                 if 'NSample' in datafile['Parameters'].attrs:
                     self.nsample = datafile['Parameters'].attrs['NSample']
@@ -322,7 +320,8 @@ class GadgetSnapshot(GadgetBox):
                         continue
 
                     npart_by_type_in_mass_block = \
-                        self.number_of_particles_this_file_by_type[idx_with_mass]
+                        self.number_of_particles_this_file_by_type[
+                            idx_with_mass]
                     npart_total_in_mass_block = np.sum(
                         npart_by_type_in_mass_block)
                     if not masses_from_table:
@@ -457,71 +456,82 @@ class GadgetSnapshot(GadgetBox):
                         coords = snappt['Coordinates'][()]
                         if self.use_kdtree:
                             kdtree = KDTree(
-                                coords, boxsize=self.box_size*(1 + self.buffer))
-                            cutout_inds = kdtree.query_ball_point(
+                                coords, boxsize=self.box_size*(
+                                        1 + self.buffer))
+                            region_inds = kdtree.query_ball_point(
                                 region_positions, region_radii)
                         else:
-                            cutout_inds = []
-                            for pos, rad in zip(region_positions, region_radii):
+                            region_inds = []
+                            for pos, rad in zip(
+                                    region_positions, region_radii):
                                 r = vector_norm(
                                     recenter_coordinates(
                                         coords - pos, self.box_size))
-                                cutout_inds.append(np.argwhere(r < rad).flatten())
-                        region_lens = [len(inds) for inds in cutout_inds]
-                        cutout_inds = np.hstack(cutout_inds).astype(int)
-                        if len(cutout_inds) == 0:
+                                region_inds.append(
+                                    np.argwhere(r < rad).flatten())
+                        region_lens = [len(inds) for inds in region_inds]
+                        region_inds = np.hstack(region_inds).astype(int)
+                        if len(region_inds) == 0:
                             nc = len(region_positions)
+                            metallicities = None
+                            formation_times = None
+                            if 'Metallicity' in list(snappt):
+                                metallicities = [np.array([])] * nc
+                            if 'StellarFormationTime' in list(snappt):
+                                formation_times = [np.array([])] * nc
                             return [np.array([], dtype=np.uint64)]*nc, \
                                 [np.array([]).reshape(0, 3)]*nc, \
                                 [np.array([]).reshape(0, 3)]*nc, \
-                                [np.array([])]*nc
-                        coords = coords[cutout_inds]
+                                [np.array([])]*nc, \
+                                metallicities, \
+                                formation_times
+                        coords = coords[region_inds]
                         coords = np.split(coords, np.cumsum(region_lens))[:-1]
                     else:
-                        cutout_inds = None
+                        region_inds = None
 
                     if load_ids:
-                        if cutout_inds is None:
+                        if region_inds is None:
                             ids = snappt['ParticleIDs'][()]
                         else:
                             if read_mode == 1:
                                 ids = snappt['ParticleIDs'][()]
                             elif read_mode == 2:
                                 ids = snappt['ParticleIDs']
-                            ids = ids[cutout_inds]
+                            ids = ids[region_inds]
                             ids = np.split(ids, np.cumsum(region_lens))[:-1]
                     else:
                         ids = None
 
                     if load_coords:
-                        if cutout_inds is None:
+                        if region_inds is None:
                             coords = snappt['Coordinates'][()]
                     else:
                         coords = None
 
                     if load_vels:
-                        if cutout_inds is None:
+                        if region_inds is None:
                             vels = snappt['Velocities'][()]
                         else:
                             if read_mode == 1:
                                 vels = snappt['Velocities'][()]
                             elif read_mode == 2:
                                 vels = snappt['Velocities']
-                            vels = vels[cutout_inds]
+                            vels = vels[region_inds]
                             vels = np.split(vels, np.cumsum(region_lens))[:-1]
                     else:
                         vels = None
 
                     if load_masses:
                         if 'Masses' in list(snappt):
-                            if cutout_inds is None:
+                            if region_inds is None:
                                 masses = snappt['Masses'][()]
                             else:
                                 if read_mode == 1:
                                     masses = snappt['Masses'][()]
                                 elif read_mode == 2:
                                     masses = snappt['Masses']
-                                masses = masses[cutout_inds]
+                                masses = masses[region_inds]
                                 masses = np.split(
                                     masses, np.cumsum(region_lens))[:-1]
                         else:
@@ -531,21 +541,21 @@ class GadgetSnapshot(GadgetBox):
                         masses = None
 
                     if 'Metallicity' in list(snappt):
-                        if cutout_inds is None:
+                        if region_inds is None:
                             metallicities = snappt['Metallicity'][()]
                         else:
                             if read_mode == 1:
                                 metallicities = snappt['Metallicity'][()]
                             elif read_mode == 2:
                                 metallicities = snappt['Metallicity']
-                            metallicities = metallicities[cutout_inds]
+                            metallicities = metallicities[region_inds]
                             metallicities = np.split(
                                 metallicities, np.cumsum(region_lens))[:-1]
                     else:
                         metallicities = None
 
                     if 'StellarFormationTime' in list(snappt):
-                        if cutout_inds is None:
+                        if region_inds is None:
                             formation_times = snappt['StellarFormationTime'][()]
                         else:
                             if read_mode == 1:
@@ -553,7 +563,7 @@ class GadgetSnapshot(GadgetBox):
                                     ()]
                             elif read_mode == 2:
                                 formation_times = snappt['StellarFormationTime']
-                            formation_times = formation_times[cutout_inds]
+                            formation_times = formation_times[region_inds]
                             formation_times = np.split(
                                 formation_times, np.cumsum(region_lens))[:-1]
                     else:
@@ -602,6 +612,9 @@ class GadgetSnapshot(GadgetBox):
             if snapdata[0][5] is not None:
                 self.formation_times, region_offsets = stack(5)
             self.region_offsets = region_offsets
+            self.region_slices = [
+                slice(*x) for x in list(
+                    zip(region_offsets[:-1], region_offsets[1:]))]
 
         if self.snapshot_format == 3:
             read_hdf5_snapshot(filenames)
@@ -958,6 +971,9 @@ class VelociraptorCatalogue:
                 group['R_200mean'][gslice] = cat_props['R_200mean'][()] * \
                     self.h
                 group['M_200mean'][gslice] = cat_props['Mass_200mean'][()] * \
+                    self.h
+                group['R_BN98'][gslice] = cat_props['R_BN98'][()] * self.h
+                group['M_BN98'][gslice] = cat_props['Mass_BN98'][()] * \
                     self.h
                 group['mass'][gslice] = cat_props['Mass_FOF'][()] * self.h
                 cmx, cmy, cmz = \
