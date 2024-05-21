@@ -267,7 +267,7 @@ class GadgetSnapshot(GadgetBox):
                 snapshot_files, load_ids, load_coords, load_vels, load_masses,
                 region_positions, region_radii, read_mode)
             if verbose:
-                print("...Loaded in {} seconds\n".format(
+                print("...Loaded PartType{} data in {} seconds\n".format(particle_type,
                     round(time.time() - start, 4)))
 
         else:
