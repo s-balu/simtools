@@ -68,7 +68,7 @@ def calc_density_profile(masses, coords=None, radius_limits=None,
             np.array([len(x) for x in binds]) > 0).flat[0]][0], np.ndarray)
     n_angular_bins = len(binds) if uses_angular_binning else 1
 
-    shell_vols = ((4 * np.pi / 3) * (redges[1:]**3 - redges[:-1]**3))
+    shell_vols = (4 * np.pi / 3) * (redges[1:]**3 - redges[:-1]**3)
     bin_vols = shell_vols / n_angular_bins
 
     def calc_profile(binds_subset):
