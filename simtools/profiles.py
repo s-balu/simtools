@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.signal import savgol_filter
-from healpy.pixelfunc import npix2nside, ang2pix
+# from healpy.pixelfunc import npix2nside, ang2pix
 
 from simtools.utils import vector_norm, simple_derivative, churazov_smooth
 from simtools.quantities import radial_velocity, azimuthal_velocity, \
