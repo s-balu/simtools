@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from sphviewer.tools import QuickView
+#from sphviewer.tools import QuickView
 
 from simtools.utils import pretty_print
 
