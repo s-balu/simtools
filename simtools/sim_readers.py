@@ -220,10 +220,10 @@ class GadgetBox:
 
 class GadgetSnapshot(GadgetBox):
 
-    def __init__(self, path, snapshot_filename, snapshot_number, particle_type,
-                 load_ids=True, load_coords=True, load_vels=True,
-                 load_masses=True, region_positions=None, region_radii=None,
-                 use_kdtree=False, buffer=0.0, read_mode=1,
+    def __init__(self, path, snapshot_filename, snapshot_number,
+                 particle_type=None, load_ids=False, load_coords=False,
+                 load_vels=False, load_masses=False, region_positions=None,
+                 region_radii=None, use_kdtree=False, buffer=0.0, read_mode=1,
                  unit_length_in_cm=None, unit_mass_in_g=None,
                  unit_velocity_in_cm_per_s=None, snapshot_format=None,
                  npool=None, verbose=True):
@@ -277,14 +277,7 @@ class GadgetSnapshot(GadgetBox):
     def read_snapshot(self, filenames, load_ids, load_coords, load_vels,
                       load_masses, region_positions, region_radii, read_mode):
 
-        if region_positions is not None:
-            region_positions = np.atleast_2d(region_positions)
-            region_radii = np.atleast_1d(region_radii)
-
         def read_binary_snapshot(fnames):
-
-            with open(fnames[0], 'rb') as snap:
-                self.read_parameters(snap, self.snapshot_format)
 
             if self.number_of_particles_by_type[self.particle_type] == 0:
                 self.ids = np.array([])
@@ -294,6 +287,8 @@ class GadgetSnapshot(GadgetBox):
                 if self.particle_type == 0:
                     self.us_all = np.array([])
                     self.rhos_all = np.array([])
+                if region_positions is not None:
+                    self.region_offsets = np.array([])
 
                 return
 
@@ -427,7 +422,7 @@ class GadgetSnapshot(GadgetBox):
                 if self.particle_type == 0:
                     self.internal_energy = np.concatenate(us_all)[inds]
                     self.density = np.concatenate(rhos_all)[inds]
-                self.region_offsets = np.array([0, len(inds)])
+                self.region_offsets = np.array([0])
             else:
                 self.ids = np.concatenate(ids_all)
                 self.coordinates = np.concatenate(coords_all)
@@ -447,9 +442,6 @@ class GadgetSnapshot(GadgetBox):
             self.velocities *= np.sqrt(1 + self.redshift)
 
         def read_hdf5_snapshot(fnames):
-
-            with h5py.File(fnames[0], 'r') as snap0:
-                self.read_parameters(snap0, self.snapshot_format)
 
             def read_files(ii):
 
@@ -649,6 +641,21 @@ class GadgetSnapshot(GadgetBox):
                         zip(region_offsets[:-1], region_offsets[1:]))]
 
         if self.snapshot_format == 3:
+            with h5py.File(filenames[0], 'r') as snap:
+                self.read_parameters(snap, self.snapshot_format)
+        else:
+            with open(filenames[0], 'rb') as snap:
+                self.read_parameters(snap, self.snapshot_format)
+
+        if not np.any(
+                np.array([load_ids, load_coords, load_vels, load_masses])):
+            return
+
+        if region_positions is not None:
+            region_positions = np.atleast_2d(region_positions)
+            region_radii = np.atleast_1d(region_radii)
+
+        if self.snapshot_format == 3:
             read_hdf5_snapshot(filenames)
         else:
             read_binary_snapshot(filenames)
@@ -659,7 +666,8 @@ class GadgetSnapshot(GadgetBox):
 class GadgetCatalogue(GadgetBox):
 
     def __init__(self, path, catalogue_filename, snapshot_number,
-                 particle_type, unit_length_in_cm=None, unit_mass_in_g=None,
+                 particle_type=None, load_halo_data=True,
+                 unit_length_in_cm=None, unit_mass_in_g=None,
                  unit_velocity_in_cm_per_s=None, catalogue_format=None,
                  verbose=True):
 
@@ -691,7 +699,8 @@ class GadgetCatalogue(GadgetBox):
                 print('Found {} halo catalogue file(s) for snapshot {} in '
                       'directory {}'.format(ncat, snapshot_number, path))
                 start = time.time()
-            self.group, self.halo = self.read_halos(catalogue_files)
+            self.group, self.halo = self.read_halos(
+                catalogue_files, load_halo_data)
             if verbose:
                 print("...Loaded in {} seconds\n".format(
                     round(time.time() - start, 4)))
@@ -699,13 +708,16 @@ class GadgetCatalogue(GadgetBox):
             self.has_cat = False
             warnings.warn('No catalogue files found!')
 
-    def read_halos(self, filenames):
+    def read_halos(self, filenames, load_halo_data):
 
         with h5py.File(filenames[0], 'r') as halo_cat:
             if not hasattr(self, 'redshift'):
                 self.read_parameters(halo_cat, self.catalogue_format)
             self.number_of_groups = halo_cat['Header'].attrs['Ngroups_Total']
             self.number_of_halos = halo_cat['Header'].attrs['Nsubhalos_Total']
+
+        if not load_halo_data:
+            return {}, {}
 
         group = {}
         halo = {}
@@ -824,7 +836,7 @@ class GadgetCatalogue(GadgetBox):
             group['center_of_mass'] = None
 
         if gidx == 0:
-            return None, None
+            return {}, {}
         else:
             return group, halo
 
@@ -832,8 +844,8 @@ class GadgetCatalogue(GadgetBox):
 class VelociraptorCatalogue:
 
     def __init__(self, path, catalogue_filename, snapshot_number,
-                 particle_type, thidv=int(1e12), load_particle_ids=True,
-                 verbose=True):
+                 particle_type=None, thidv=int(1e12), load_halo_data=True,
+                 load_halo_particle_ids=False, verbose=True):
 
         self.catalogue_path = path
         self.catalogue_filename = catalogue_filename
@@ -856,8 +868,8 @@ class VelociraptorCatalogue:
                 print('Found {} halo catalogue file(s) for snapshot {} in '
                       'directory {}'.format(ncat, snapshot_number, path))
                 start = time.time()
-            self.read_params()
-            self.halo = self.read_halos(catalogue_files, load_particle_ids)
+            self.halo = self.read_halos(
+                catalogue_files, load_halo_data, load_halo_particle_ids)
             if verbose:
                 print("...Loaded in {} seconds\n".format(
                     round(time.time() - start, 4)))
@@ -908,7 +920,13 @@ class VelociraptorCatalogue:
             self.critical_density = 3 * (self.hubble_parameter / self.h)**2 / \
                 (8 * np.pi * self.gravitational_constant)
 
-    def read_halos(self, catalogue_files, load_particle_ids):
+    def read_halos(self, catalogue_files, load_halo_data,
+                   load_halo_particle_ids):
+
+        self.read_params()
+
+        if not load_halo_data:
+            return {}
 
         halo = {}
 
@@ -934,7 +952,7 @@ class VelociraptorCatalogue:
             halo[hkey] = np.empty(nhalos, dtype=np.int64)
         for hkey in halo_keys_vec3:
             halo[hkey] = np.empty((nhalos, 3))
-        if load_particle_ids:
+        if load_halo_particle_ids:
             halo['particle_IDs'] = []
 
         hidx = 0
@@ -972,7 +990,7 @@ class VelociraptorCatalogue:
                     hlen = hoffset[1:] - hoffset[:-1]
                     halo['number_of_particles'][hslice] = np.append(
                         hlen, npart - hoffset[-1])
-                if load_particle_ids:
+                if load_halo_particle_ids:
                     halo['particle_IDs'].append(cat_part['Particle_IDs'][()])
 
             catfile_props = catfile.replace(
@@ -1033,7 +1051,7 @@ class VelociraptorCatalogue:
 
                 self.snapshot_number = int(haloids[0] / self.thidv)
 
-        if load_particle_ids:
+        if load_halo_particle_ids:
             halo['particle_IDs'] = np.hstack(halo['particle_IDs'])
             halo['offset'][:] = np.array(
                 [0] + list(np.cumsum(halo['number_of_particles']))[:-1])
@@ -1044,7 +1062,8 @@ class VelociraptorCatalogue:
 class AHFCatalogue:
 
     def __init__(self, path, catalogue_filename, snapshot_number,
-                 particle_type, load_particle_ids=False, verbose=True):
+                 particle_type=None, load_halo_data=True,
+                 load_halo_particle_ids=False, verbose=True):
 
         self.catalogue_path = path
         self.catalogue_filename = catalogue_filename
@@ -1060,7 +1079,8 @@ class AHFCatalogue:
                 print('Found {} halo catalogue file(s) for snapshot {} in '
                       'directory {}'.format(ncat, snapshot_number, path))
                 start = time.time()
-            self.halo = self.read_halos(catalogue_files, load_particle_ids)
+            self.halo = self.read_halos(
+                catalogue_files, load_halo_data, load_halo_particle_ids)
             if verbose:
                 print("...Loaded in {} seconds\n".format(
                     round(time.time() - start, 4)))
@@ -1068,7 +1088,10 @@ class AHFCatalogue:
             self.has_cat = False
             warnings.warn('No catalogue files found!')
 
-    def read_halos(self, filenames, load_particle_ids):
+    def read_halos(self, filenames, load_halo_data, load_halo_particle_ids):
+
+        if not load_halo_data:
+            return {}
 
         halo = {}
 
@@ -1107,7 +1130,7 @@ class AHFCatalogue:
             halo['host_ID'][sl] = np.loadtxt(
                 filename, dtype=np.uint64, skiprows=0, usecols=1)
 
-            data = np.loadtxt(filename, skiprows=0)[:, 2:]
+            data = np.atleast_2d(np.loadtxt(filename, skiprows=0))[:, 2:]
             halo['number_of_subhalos'][sl] = data[:, 0].astype(np.int32)
             halo['virial_mass'][sl] = data[:, 1]
             halo['number_of_particles'][sl] = data[:, 2].astype(np.int32)
@@ -1118,7 +1141,7 @@ class AHFCatalogue:
             halo['center_of_mass_offset'][sl] = data[:, 13]
             halo['angular_momentum'][sl] = data[:, 19:22]
 
-            if load_particle_ids:
+            if load_halo_particle_ids:
                 filename = filename.replace('halos', 'particles')
                 particle_ids = np.loadtxt(filename, dtype=np.uint64,
                                           skiprows=1, usecols=0)
