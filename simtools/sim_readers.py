@@ -386,22 +386,18 @@ class GadgetSnapshot(GadgetBox):
                         offset += 4  # 2nd 4 byte buffer
                         offset += 4  # 1st 4 byte buffer
                         offset += 16
-                        offset += ptype_offset * 4
                         snap.seek(offset, os.SEEK_SET)
                         u = np.fromfile(snap, dtype=np.float32, count=npart)
                         us_all.append(u)
-                        offset -= ptype_offset * 4
 
                         # Increment beyond the u block
-                        offset += npart_total * 4
+                        offset += npart * 4
                         offset += 4  # 2nd 4 byte buffer
                         offset += 4  # 1st 4 byte buffer
                         offset += 16
-                        offset += ptype_offset * 4
                         snap.seek(offset, os.SEEK_SET)
                         rho = np.fromfile(snap, dtype=np.float32, count=npart)
                         rhos_all.append(rho)
-                        offset -= ptype_offset * 4
 
             if region_positions is not None:
                 coords = np.concatenate(coords_all)
