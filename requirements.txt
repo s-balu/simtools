@@ -2,7 +2,7 @@ numpy
 scipy
 matplotlib
 h5py
-py-sphviewer
+# py-sphviewer
 tabulate
 scikit-learn
 pathos
