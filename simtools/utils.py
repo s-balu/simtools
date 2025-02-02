@@ -6,9 +6,7 @@ import tabulate
 def recenter_coordinates(position, boxsize):
     if isinstance(boxsize, (float, np.floating, int, np.integer)):
         boxsize = boxsize * np.ones(3)
-    for dim, bs in enumerate(boxsize):
-        position[np.argwhere((position[:, dim] > bs/2)), dim] -= bs
-        position[np.argwhere((position[:, dim] < -bs/2)), dim] += bs
+    position = boxsize/2 - ((boxsize/2 - position) % boxsize)
     return position
 
 

@@ -1,34 +1,80 @@
 import numpy as np
 from scipy.signal import savgol_filter
 from healpy.pixelfunc import npix2nside, ang2pix
+from warnings import warn
 
 from simtools.utils import vector_norm, simple_derivative, churazov_smooth
 from simtools.quantities import radial_velocity, azimuthal_velocity, \
     velocity_dispersion
 
 
-def bin_halo(coords, radius_limits, n_radial_bins, n_angular_bins):
+def bin_halo(coords, radial_bins, radius_limits=None, center=False,
+             log_bins=True, n_angular_bins=1):
+
+    if not hasattr(radial_bins, "__len__"):
+
+        if radius_limits is None:
+            r = vector_norm(coords)
+            if log_bins:
+                r = r[np.argwhere(r > 0.0).flatten()]
+            r1, r2 = min(r), max(r)
+            radius_limits = (r1, r2)
+
+        if center:
+            if radius_limits is None:
+                raise ValueError(
+                    "Must supply radius limits when `center` is True.")
+            r1, r2 = radius_limits
+            if log_bins:
+                log_bin_width = (np.log10(r2) - np.log10(r1)) / (
+                            radial_bins - 1)
+                r1_ = 10**(np.log10(r1) - log_bin_width / 2)
+                r2_ = 10**(np.log10(r2) + log_bin_width / 2)
+                radius_limits = (r1_, r2_)
+            else:
+                bin_width = (r2 - r1) / (radial_bins - 1)
+                r1_ = r1 - bin_width / 2
+                r2_ = r2 + bin_width / 2
+                radius_limits = (r1_, r2_)
+
+        n_radial_bins = radial_bins
+        if log_bins:
+            radial_bins = 10**np.linspace(
+                *np.log10(radius_limits), radial_bins+1)
+        else:
+            radial_bins = np.linspace(*radius_limits, radial_bins+1)
+    else:
+
+        if center:
+            warn("Bin centering is not applied when `radial_bins` is provided "
+                 "as an array.")
+        if radius_limits is not None:
+            warn("Provided `radius_limits` are ignored when `radial_bins` is "
+                 "provided as an array.")
+
+        n_radial_bins = len(radial_bins) - 1
+        radius_limits = (min(radial_bins), max(radial_bins))
 
     r = vector_norm(coords)
-    if radius_limits is None:
-        radius_limits = (min(r), max(r))
-
-    radial_bins = 10**np.linspace(*np.log10(radius_limits), n_radial_bins + 1)
     inside_rlims = np.argwhere(
         (r >= radius_limits[0]) & (r <= radius_limits[1])).flatten()
     r = r[inside_rlims]
 
     if n_angular_bins > 1:
-        x, y, z = np.copy(coords)[inside_rlims].T
-        theta = np.arccos(z / r)
-        phi = np.arctan2(y, x)
-        pixels = ang2pix(npix2nside(n_angular_bins), theta, phi)
+        c = np.copy(coords)[inside_rlims].T
+        phi = np.arctan2(c[1], c[0])
+        if len(c) == 3:
+            theta = np.arccos(c[2] / r)
+            ang_digits = ang2pix(npix2nside(n_angular_bins), theta, phi)
+        else:
+            ang_digits = np.digitize(
+                phi, np.linspace(-np.pi, np.pi, n_angular_bins+1))-1
 
     binds = []
     for na in range(n_angular_bins):
 
         if n_angular_bins > 1:
-            inside_angle = np.argwhere(pixels == na).flatten()
+            inside_angle = np.argwhere(ang_digits == na).flatten()
             ra = r[inside_angle]
             rad_digits = np.digitize(ra, radial_bins)-1
         else:
@@ -54,21 +100,25 @@ def bin_halo(coords, radius_limits, n_radial_bins, n_angular_bins):
     return binds, radial_bins, rcenters
 
 
-def calc_density_profile(masses, coords=None, radius_limits=None,
-                         n_radial_bins=None, n_angular_bins=None,
-                         binned_halo=None):
+def calc_density_profile(masses, mode='volume', coords=None, radial_bins=None,
+                         radius_limits=None, center=None, log_bins=None,
+                         n_angular_bins=None, binned_halo=None,
+                         return_angular_profiles=False):
 
     if binned_halo is None:
         binds, redges, rcenters = bin_halo(
-            coords, radius_limits, n_radial_bins, n_angular_bins)
+            coords, radial_bins, radius_limits, center, log_bins,
+            n_angular_bins)
     else:
         binds, redges, rcenters = binned_halo
 
-    uses_angular_binning = isinstance(binds[np.argwhere(
-            np.array([len(x) for x in binds]) > 0).flat[0]][0], np.ndarray)
+    uses_angular_binning = isinstance(binds[0], list)
     n_angular_bins = len(binds) if uses_angular_binning else 1
 
-    shell_vols = (4 * np.pi / 3) * (redges[1:]**3 - redges[:-1]**3)
+    if mode == 'volume':
+        shell_vols = (4 * np.pi / 3) * (redges[1:]**3 - redges[:-1]**3)
+    elif mode == 'surface':
+        shell_vols = np.pi * (redges[1:]**2 - redges[:-1]**2)
     bin_vols = shell_vols / n_angular_bins
 
     def calc_profile(binds_subset):
@@ -85,7 +135,10 @@ def calc_density_profile(masses, coords=None, radius_limits=None,
         density_profiles = []
         for binds_angle in binds:
             density_profiles.append(calc_profile(binds_angle))
-        return rcenters, np.median(np.array(density_profiles), axis=0)
+        if return_angular_profiles:
+            return rcenters, np.array(density_profiles)
+        else:
+            return rcenters, np.median(np.array(density_profiles), axis=0)
     else:
         return rcenters, calc_profile(binds)
 
@@ -142,12 +195,16 @@ def calc_log_density_slope_profile(density_profile, r=None, window_length=1,
             np.log10(r), np.log10(density_profile), window_length)
 
 
-def calc_mass_profile(masses, coords=None, radius_limits=None,
-                      n_radial_bins=None, binned_halo=None):
+def calc_mass_profile(masses, coords=None, radii=None,
+                      radius_limits=None, log_bins=True, binned_halo=None):
 
     if binned_halo is None:
-        binds, redges, _ = bin_halo(
-            coords, radius_limits, n_radial_bins, n_angular_bins=1)
+        if isinstance(radii, int):
+            if log_bins:
+                radii = 10**np.linspace(*np.log10(radius_limits), radii)
+            else:
+                radii = np.linspace(*radius_limits, radii)
+        binds, redges, _ = bin_halo(coords, np.insert(radii, 0, 0.0))
     else:
         binds, redges, _ = binned_halo
 
@@ -160,23 +217,25 @@ def calc_mass_profile(masses, coords=None, radius_limits=None,
 
 
 def calc_circular_velocity_profile(masses, gravitational_constant, coords=None,
-                                   radius_limits=None, n_radial_bins=None,
-                                   binned_halo=None):
+                                   radii=None, radius_limits=None,
+                                   log_bins=None, binned_halo=None):
 
     r, mass_profile = calc_mass_profile(
-        masses, coords, radius_limits, n_radial_bins,
+        masses, coords, radii, radius_limits, log_bins,
         binned_halo)
 
     return r, np.sqrt(gravitational_constant * mass_profile / r)
 
 
-def calc_radial_velocity_profile(vels, coords, radius_limits=None,
-                                 n_radial_bins=None, n_angular_bins=None,
+def calc_radial_velocity_profile(vels, coords, radial_bins=None,
+                                 radius_limits=None, center=None,
+                                 log_bins=None, n_angular_bins=None,
                                  binned_halo=None):
 
     if binned_halo is None:
         binds, redges, rcenters = bin_halo(
-            coords, radius_limits, n_radial_bins, n_angular_bins)
+            coords, radial_bins, radius_limits, center, log_bins,
+            n_angular_bins)
     else:
         binds, redges, rcenters = binned_halo
 
@@ -194,13 +253,15 @@ def calc_radial_velocity_profile(vels, coords, radius_limits=None,
         return rcenters, calc_profile(binds)
 
 
-def calc_azimuthal_velocity_profile(vels, coords, radius_limits=None,
-                                    n_radial_bins=None, n_angular_bins=None,
+def calc_azimuthal_velocity_profile(vels, coords, radial_bins=None,
+                                    radius_limits=None, center=None,
+                                    log_bins=None, n_angular_bins=None,
                                     binned_halo=None):
 
     if binned_halo is None:
         binds, redges, rcenters = bin_halo(
-            coords, radius_limits, n_radial_bins, n_angular_bins)
+            coords, radial_bins, radius_limits, center, log_bins,
+            n_angular_bins)
     else:
         binds, redges, rcenters = binned_halo
 
@@ -220,18 +281,20 @@ def calc_azimuthal_velocity_profile(vels, coords, radius_limits=None,
 
 
 def calc_velocity_dispersion_profile(vels, masses=None, coords=None,
-                                     radius_limits=None, n_radial_bins=None,
+                                     radial_bins=None, radius_limits=None,
+                                     center=None, log_bins=None,
                                      binned_halo=None):
 
     if binned_halo is None:
         binds, redges, rcenters = bin_halo(
-            coords, radius_limits, n_radial_bins, n_angular_bins=1)
+            coords, radial_bins, radius_limits, center, log_bins,
+            n_angular_bins=1)
     else:
         binds, redges, rcenters = binned_halo
 
     profile, m = [], None
     for inds in binds:
-        if masses is not None:
+        if masses is not None and hasattr(masses, "__len__"):
             m = masses[inds]
         profile.append(velocity_dispersion(vels[inds], m))
 
