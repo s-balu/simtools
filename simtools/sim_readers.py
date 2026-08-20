@@ -775,11 +775,11 @@ class GadgetCatalogue(GadgetBox):
         group_keys_vec3 = ['position_of_minimum_potential', 'center_of_mass',
                            'velocity']
         if self.load_hydro and self.hydro_sim:
-            halo_keys_float = ['mass', 'gas_mass', 'stellar_mass', 'halfmass_radius', ]
+            halo_keys_float = ['mass', 'gas_mass', 'stellar_mass', 'halfmass_radius', 'vmax_radius']
             halo_keys_int = ['number_of_particles', 'number_of_gas_particles', 'number_of_star_particles', 'offset', 'ID_most_bound',
                          'group_number', 'rank_in_group']
         else:
-            halo_keys_float = ['mass', 'halfmass_radius']
+            halo_keys_float = ['mass', 'halfmass_radius', 'vmax_radius']
             halo_keys_int = ['number_of_particles', 'offset', 'ID_most_bound',
                          'group_number', 'rank_in_group']
         halo_keys_vec3 = ['position_of_minimum_potential', 'center_of_mass',
@@ -871,6 +871,8 @@ class GadgetCatalogue(GadgetBox):
                         'SubhaloVel'][()] / self.scale_factor
                     halo['halfmass_radius'][hslice] = halo_cat['Subhalo'][
                         'SubhaloHalfmassRadType'][()][:, self.particle_type]
+                    halo['vmax_radius'][hslice] = halo_cat['Subhalo'][
+                        'SubhaloVmaxRad'][()]
                     halo['number_of_particles'][hslice] = halo_cat[
                         'Subhalo']['SubhaloLen'][()] ## total number of particles
                     if self.load_hydro and self.hydro_sim:
