@@ -10,7 +10,7 @@ setup(
     package_dir={'simtools': './simtools/'},
     packages=['simtools'],
     setup_requires=['numpy'],
-    install_requires=['numpy', 'scipy', 'matplotlib', 'h5py', 'py-sphviewer',
+    install_requires=['numpy', 'scipy', 'matplotlib', 'h5py', 
                       'tabulate', 'scikit-learn', 'pathos', 'healpy'],
     include_package_data=True,
     zip_safe=False,
